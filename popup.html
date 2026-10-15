@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { width: 300px; margin: 0; padding: 14px; font: 13px/1.4 system-ui, sans-serif; color: #202124; }
+    h1 { font-size: 15px; margin: 0 0 12px; }
+    label.row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    textarea { width: 100%; box-sizing: border-box; height: 70px; font: inherit; padding: 6px; border: 1px solid #dadce0; border-radius: 6px; resize: vertical; }
+    .hint { color: #5f6368; font-size: 12px; margin: 4px 0 10px; }
+    button { background: #1a73e8; color: #fff; border: 0; border-radius: 6px; padding: 7px 14px; font: inherit; cursor: pointer; }
+    #status { margin-left: 8px; color: #1e8e3e; }
+    .count { margin-top: 12px; color: #5f6368; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>Fathom Auto-Admit</h1>
+  <label class="row">Enabled <input type="checkbox" id="enabled"></label>
+  <label class="row">Open waiting list automatically <input type="checkbox" id="autoOpenPanel"></label>
+  <div>Bot names to admit (one per line)</div>
+  <textarea id="names"></textarea>
+  <div class="hint">Matches if the waiting guest's name contains a line (case-insensitive).</div>
+  <button id="save">Save</button><span id="status"></span>
+  <div class="count">Admitted so far: <span id="count">0</span></div>
+  <script src="popup.js"></script>
+</body>
+</html>
