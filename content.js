@@ -14,7 +14,8 @@ const ROW_TEXT_MAX = 200; // a single waiting row / toast is short; whole panels
 
 let settings = { ...DEFAULTS };
 let busy = false;
-let lastIndicatorKey = '';
+let lastWaitingCount = 0;
+let lastIndicatorSeen = 0;
 const attempted = new WeakMap(); // row node -> timestamp of last attempt
 
 const norm = (s) =>
@@ -135,27 +136,54 @@ async function admitRow(row) {
   return true;
 }
 
-// Expand a collapsed "Waiting to join" / "With potential risks" group.
+// Expand a collapsed "Waiting to join" / "With potential risks" group inside
+// the People panel. Must not match the "N guests waiting" chip, which toggles
+// the whole panel.
 function expandWaitingGroups() {
   for (const b of document.querySelectorAll('[aria-expanded="false"]')) {
-    if (isVisible(b) && /potential risk|waiting to join|waiting/.test(label(b))) realClick(b);
+    if (isVisible(b) && /^(with )?potential risk|^waiting to join/.test(label(b))) realClick(b);
   }
 }
 
-// When nobody is listed yet, open the waiting list once per new waiting state.
-function openWaitingListIfNeeded() {
-  if (!settings.autoOpenPanel) return;
+// The waiting list is already on screen (People panel open).
+const waitingListOpen = () =>
+  [...document.querySelectorAll('h1, h2, h3, h4, [role="heading"], div, span')].some(
+    (el) => el.childElementCount === 0 && /^waiting to join$/.test(norm(el.textContent)) && isVisible(el)
+  );
+
+// The bot's name shows somewhere that isn't a waiting row or join request,
+// e.g. its video tile or the "In the meeting" list.
+function botInMeeting(nameEls) {
+  return nameEls.some((el) => {
+    let node = el;
+    for (let i = 0; i < 4 && node && node !== document.body; i++, node = node.parentElement) {
+      const t = norm(node.textContent);
+      if (t.length > ROW_TEXT_MAX) break;
+      if (/wants? to join|asking to join|waiting|\badmit\b|\bdeny\b/.test(t)) return false;
+    }
+    return true;
+  });
+}
+
+// Open the waiting list only when the number of waiting guests goes up, and
+// never click the chip while the panel is already open (it would close it).
+function openWaitingListIfNeeded(nameEls) {
+  if (!settings.autoOpenPanel || waitingListOpen() || botInMeeting(nameEls)) return;
   const indicator = [...document.querySelectorAll(BTN)]
     .filter(isVisible)
     .find((b) => /\b(guests?|people|person|someone)\b.*\b(waiting|wants? to join)\b|^view all\b/.test(label(b)));
   if (!indicator) {
-    lastIndicatorKey = '';
+    if (Date.now() - lastIndicatorSeen > 10000) lastWaitingCount = 0;
     return;
   }
-  const key = label(indicator);
-  if (key === lastIndicatorKey) return;
-  lastIndicatorKey = key;
-  LOG('opening waiting list via', key);
+  lastIndicatorSeen = Date.now();
+  const count = parseInt((label(indicator).match(/\d+/) || ['1'])[0], 10);
+  if (count <= lastWaitingCount) {
+    lastWaitingCount = count; // someone left or was denied; a later arrival counts as new
+    return;
+  }
+  lastWaitingCount = count;
+  LOG('opening waiting list via', label(indicator));
   realClick(indicator);
 }
 
@@ -166,10 +194,11 @@ async function scan() {
     expandWaitingGroups();
     // Button whose own label names the bot, e.g. aria-label="Admit Ryan's Fathom Notetaker".
     const direct = [...document.querySelectorAll(BTN)].filter(isVisible).find((b) => isAdmit(b) && matchesTarget(b.getAttribute('aria-label')));
-    const rows = direct ? [{ node: direct, admit: direct }] : findNameElements().map(rowFor).filter(Boolean);
+    const nameEls = direct ? [] : findNameElements();
+    const rows = direct ? [{ node: direct, admit: direct }] : nameEls.map(rowFor).filter(Boolean);
 
     if (!rows.length) {
-      openWaitingListIfNeeded();
+      openWaitingListIfNeeded(nameEls);
       return;
     }
     for (const row of rows) {
