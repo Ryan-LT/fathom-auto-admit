@@ -165,26 +165,46 @@ function botInMeeting(nameEls) {
   });
 }
 
+const INDICATOR = /\b(guests?|people|person|someone)\b.*\b(waiting|wants? to join|asking to join)\b|^view all\b/;
+const CLICKABLE = 'button, [role="button"], [jsaction], [tabindex]';
+
+// The "N guests waiting" chip. Meet doesn't always render it as a <button>,
+// so match any element by aria-label or short text and click the innermost
+// match; the click bubbles up to whatever handles it.
+function findWaitingIndicator() {
+  let best = null;
+  for (const el of document.querySelectorAll('[aria-label], ' + CLICKABLE + ', span, div')) {
+    const aria = norm(el.getAttribute('aria-label'));
+    const text = el.childElementCount <= 2 ? norm(el.textContent) : '';
+    const hit = (aria.length <= 80 && INDICATOR.test(aria)) || (text.length <= 40 && INDICATOR.test(text));
+    if (!hit || !isVisible(el)) continue;
+    if (best && !best.target.contains(el)) break; // first chip found; ignore later ones
+    best = { target: el, label: aria || text };
+  }
+  if (!best) return null;
+  const toggle = best.target.closest('[aria-expanded]');
+  if (toggle && toggle.getAttribute('aria-expanded') === 'true') return null; // panel already open
+  return best;
+}
+
 // Open the waiting list only when the number of waiting guests goes up, and
 // never click the chip while the panel is already open (it would close it).
 function openWaitingListIfNeeded(nameEls) {
   if (!settings.autoOpenPanel || waitingListOpen() || botInMeeting(nameEls)) return;
-  const indicator = [...document.querySelectorAll(BTN)]
-    .filter(isVisible)
-    .find((b) => /\b(guests?|people|person|someone)\b.*\b(waiting|wants? to join)\b|^view all\b/.test(label(b)));
+  const indicator = findWaitingIndicator();
   if (!indicator) {
     if (Date.now() - lastIndicatorSeen > 10000) lastWaitingCount = 0;
     return;
   }
   lastIndicatorSeen = Date.now();
-  const count = parseInt((label(indicator).match(/\d+/) || ['1'])[0], 10);
+  const count = parseInt((indicator.label.match(/\d+/) || ['1'])[0], 10);
   if (count <= lastWaitingCount) {
     lastWaitingCount = count; // someone left or was denied; a later arrival counts as new
     return;
   }
   lastWaitingCount = count;
-  LOG('opening waiting list via', label(indicator));
-  realClick(indicator);
+  LOG('opening waiting list via', indicator.label);
+  realClick(indicator.target);
 }
 
 async function scan() {
