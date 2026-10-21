@@ -16,6 +16,7 @@ let settings = { ...DEFAULTS };
 let busy = false;
 let lastWaitingCount = 0;
 let lastIndicatorSeen = 0;
+let panelOpenedAt = 0; // set when we opened the People panel, so we close only what we opened
 const attempted = new WeakMap(); // row node -> timestamp of last attempt
 
 const norm = (s) =>
@@ -205,6 +206,31 @@ function openWaitingListIfNeeded(nameEls) {
   lastWaitingCount = count;
   LOG('opening waiting list via', indicator.label);
   realClick(indicator.target);
+  panelOpenedAt = Date.now();
+}
+
+// Click the X on the People panel (found via its "People" heading).
+function closePeoplePanel() {
+  for (const h of document.querySelectorAll('h1, h2, h3, [role="heading"], div, span')) {
+    if (h.childElementCount || norm(h.textContent) !== 'people' || !isVisible(h)) continue;
+    let node = h.parentElement;
+    for (let i = 0; i < 8 && node && node !== document.body; i++, node = node.parentElement) {
+      if (!/waiting to join|in the meeting|add people/.test(norm(node.textContent))) continue;
+      const close = buttonsIn(node).find((b) => /^close\b/.test(label(b)));
+      if (close) {
+        LOG('closing People panel');
+        realClick(close);
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function closePanelIfWeOpenedIt() {
+  if (!panelOpenedAt) return;
+  panelOpenedAt = 0;
+  closePeoplePanel();
 }
 
 async function scan() {
@@ -218,20 +244,25 @@ async function scan() {
     const rows = direct ? [{ node: direct, admit: direct }] : nameEls.map(rowFor).filter(Boolean);
 
     if (!rows.length) {
+      // We opened the list for someone else (not our bot): put it away again.
+      if (panelOpenedAt && Date.now() - panelOpenedAt > 5000) closePanelIfWeOpenedIt();
       openWaitingListIfNeeded(nameEls);
       return;
     }
+    let admitted = false;
     for (const row of rows) {
       const last = attempted.get(row.node) || 0;
       if (Date.now() - last < 4000) continue;
       attempted.set(row.node, Date.now());
       if (await admitRow(row)) {
+        admitted = true;
         settings.admittedCount += 1;
         chrome.storage.sync.set({ admittedCount: settings.admittedCount });
         showToast('Fathom Notetaker admitted');
         await sleep(1500);
       }
     }
+    if (admitted) closePanelIfWeOpenedIt();
   } catch (e) {
     LOG('error', e);
   } finally {

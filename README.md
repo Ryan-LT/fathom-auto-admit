@@ -4,7 +4,7 @@ Chrome extension that automatically admits your Fathom Notetaker bot from the Go
 
 - Matches waiting guests whose name contains one of the configured names (default `Ryan's Fathom Notetaker`; change it in the popup).
 - Handles both a normal **Admit** button and the **With potential risks** group, where Admit sits in the ⋮ menu and asks for confirmation.
-- Opens the waiting list automatically when a "guests waiting" indicator appears (can be turned off).
+- Opens the waiting list automatically when a "guests waiting" indicator appears, and closes it again afterwards if it opened it (can be turned off).
 - Never touches other guests.
 
 ## Install locally
